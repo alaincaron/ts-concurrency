@@ -51,7 +51,7 @@
     "chai": "^4.3.10",
     "eslint": "^8.55.0",
     "eslint-plugin-import": "^2.29.0",
-    "husky": "^8.0.3",
+    "husky": "^8.0.0",
     "lint-staged": "^15.2.0",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",

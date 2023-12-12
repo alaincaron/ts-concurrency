@@ -1,6 +1,10 @@
+type VoidFunction = () => void;
+
+type PromiseDefinition = [VoidFunction, VoidFunction];
+
 export class Mutex {
-  private queue: Array<[Function, Function]>;
-  private waitQueue: Array<[Function, Function]>;
+  private queue: Array<PromiseDefinition>;
+  private waitQueue: Array<PromiseDefinition>;
   private locked: boolean;
 
   constructor() {
@@ -20,7 +24,13 @@ export class Mutex {
     });
   }
 
-  async wait(): Promise<void> {
+  tryLock(): boolean {
+    if (this.locked) return false;
+    this.locked = true;
+    return true;
+  }
+
+  wait(): Promise<void> {
     this.release();
     return new Promise<void>((resolve, reject) => {
       this.waitQueue.push([resolve, reject]);
@@ -56,7 +66,7 @@ export class Mutex {
     }
   }
 
-  execute<T>(f: () => Promise<T> | T): Promise<T> {
+  execute<T>(f: () => T | Promise<T>): Promise<T> {
     return this.lock()
       .then(f)
       .finally(() => this.release());

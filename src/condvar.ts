@@ -19,8 +19,8 @@ export class ConditionVariable<T> {
   private value: T;
   private queue: Array<{
     predicate: (t: T) => boolean | Promise<boolean>;
-    resolve: Function;
-    reject: Function;
+    resolve: (t: T) => void;
+    reject: (e: Error) => void;
   }>;
 
   constructor(initialValue: T) {
@@ -32,10 +32,10 @@ export class ConditionVariable<T> {
     return this.value;
   }
 
-  wait(condition: T | RegExp | Predicate<T>): Promise<void> {
+  wait(condition: T | RegExp | Predicate<T>): Promise<T> {
     const predicate = toPredicatec(condition);
     return new Promise((resolve, reject) => {
-      if (predicate(this.value)) resolve();
+      if (predicate(this.value)) resolve(this.value);
       this.queue.push({ predicate, resolve, reject });
     });
   }
@@ -47,7 +47,7 @@ export class ConditionVariable<T> {
       const { predicate, resolve } = this.queue[i];
       if (predicate(value)) {
         this.queue.splice(i--, 1);
-        resolve();
+        resolve(this.value);
       }
     }
   }

@@ -1,6 +1,7 @@
-type VoidFunction = () => void;
-
-type PromiseDefinition = [VoidFunction, VoidFunction];
+interface PromiseDefinition {
+  resolve: () => void;
+  reject: (e: any) => void;
+}
 
 export class Mutex {
   private queue: Array<PromiseDefinition>;
@@ -16,7 +17,7 @@ export class Mutex {
   lock(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       if (this.locked) {
-        this.queue.push([resolve, reject]);
+        this.queue.push({ resolve, reject });
       } else {
         this.locked = true;
         resolve();
@@ -30,11 +31,33 @@ export class Mutex {
     return true;
   }
 
-  wait(): Promise<void> {
-    this.release();
-    return new Promise<void>((resolve, reject) => {
-      this.waitQueue.push([resolve, reject]);
-    }).then(() => this.lock());
+  tryExecute<T>(f: () => T) {
+    if (this.tryLock()) {
+      let result: T | undefined = undefined;
+      let err: any = undefined;
+      try {
+        result = f();
+      } catch (e) {
+        err = e;
+      } finally {
+        this.unlock();
+      }
+      if (err) throw err;
+      return { executed: true, result };
+    }
+    return { executed: false };
+  }
+
+  isLocked(): boolean {
+    return this.locked;
+  }
+
+  async wait(): Promise<void> {
+    this.unlock();
+    await new Promise<void>((resolve, reject) => {
+      this.waitQueue.push({ resolve, reject });
+    });
+    return this.lock();
   }
 
   async waitUntil(predicate: () => boolean | Promise<boolean>): Promise<void> {
@@ -45,21 +68,21 @@ export class Mutex {
 
   signal() {
     if (this.waitQueue.length > 0) {
-      const [resolve, _reject] = this.waitQueue.shift()!;
+      const { resolve } = this.waitQueue.shift()!;
       resolve();
     }
   }
 
   signalAll() {
     while (this.waitQueue.length > 0) {
-      const [resolve, _reject] = this.waitQueue.shift()!;
+      const { resolve } = this.waitQueue.shift()!;
       resolve();
     }
   }
 
-  release() {
+  unlock() {
     if (this.queue.length > 0) {
-      const [resolve, _reject] = this.queue.shift()!;
+      const { resolve } = this.queue.shift()!;
       resolve();
     } else {
       this.locked = false;
@@ -69,6 +92,6 @@ export class Mutex {
   execute<T>(f: () => T | Promise<T>): Promise<T> {
     return this.lock()
       .then(f)
-      .finally(() => this.release());
+      .finally(() => this.unlock());
   }
 }

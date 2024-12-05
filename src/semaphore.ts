@@ -1,6 +1,39 @@
 import { Mutex } from './mutex';
 
-export class Semaphore {
+export interface ISemaphore {
+  permits: number;
+  canAcquire(required?: number): boolean;
+  acquire(required?: number): Promise<void>;
+  release(permitsToReturn?: number): void;
+  execute<T>(f: () => Promise<T> | T, count?: number): Promise<T>;
+}
+
+export class InfiniteSemaphore implements ISemaphore {
+  private constructor() {}
+  private static readonly INSTANCE = new InfiniteSemaphore();
+
+  static instance() {
+    return InfiniteSemaphore.INSTANCE;
+  }
+
+  get permits() {
+    return Infinity;
+  }
+
+  canAcquire(_required?: number) {
+    return true;
+  }
+
+  async acquire(_required?: number) {}
+
+  release(_permitsToReturn?: number) {}
+
+  execute<T>(f: () => Promise<T> | T, _count?: number) {
+    return Promise.resolve(f());
+  }
+}
+
+export class Semaphore implements ISemaphore {
   private nbPermits: number;
   private mutex: Mutex;
 

@@ -1,53 +1,55 @@
-type Predicate<T> = (t: T) => boolean | Promise<boolean>;
+import { LinkedList } from 'ts-data-collections';
+import { Predicate } from 'ts-fluent-iterators';
 
-function toPredicatec<T>(condition: T | RegExp | Predicate<T>): Predicate<T> {
-  if (typeof condition === 'function') {
-    return condition as Predicate<T>;
-  }
-  if (condition instanceof RegExp) {
-    return ((x: string) => condition.test(x)) as Predicate<T>;
-  }
-
-  if (typeof condition === 'number' || typeof condition === 'boolean' || typeof condition === 'string') {
-    return (value: T) => value === condition;
-  }
-
-  throw new TypeError(`Unknown condition type: ${typeof condition}`);
-}
-
-export class ConditionVariable<T> {
+export class CondVar<T> {
   private value: T;
-  private queue: Array<{
-    predicate: (t: T) => boolean | Promise<boolean>;
+  private queue: LinkedList<{
+    predicate: Predicate<T>;
     resolve: (t: T) => void;
     reject: (e: Error) => void;
   }>;
 
   constructor(initialValue: T) {
     this.value = initialValue;
-    this.queue = [];
+    this.queue = new LinkedList();
   }
 
   get(): T {
     return this.value;
   }
 
-  wait(condition: T | RegExp | Predicate<T>): Promise<T> {
-    const predicate = toPredicatec(condition);
-    return new Promise((resolve, reject) => {
+  async waitStrict(predicate: Predicate<T>): Promise<T> {
+    for (;;) {
+      await this.wait(predicate);
+      if (predicate(this.value)) return this.value;
+    }
+  }
+
+  async waitStrict2(predicate: Predicate<T>): Promise<T> {
+    for (;;) {
+      const value = await this.wait(predicate);
+      if (value === this.value) return value;
+    }
+  }
+
+  async wait(predicate: Predicate<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       if (predicate(this.value)) resolve(this.value);
-      this.queue.push({ predicate, resolve, reject });
+      this.queue.addLast({ predicate, resolve, reject });
     });
   }
 
   set(value: T) {
     this.value = value;
 
-    for (let i = 0; i < this.queue.length; ++i) {
-      const { predicate, resolve } = this.queue[i];
+    const iterator = this.queue.listIterator();
+    for (;;) {
+      const item = iterator.next();
+      if (item.done) break;
+      const { predicate, resolve } = item.value;
       if (predicate(value)) {
-        this.queue.splice(i--, 1);
-        resolve(this.value);
+        iterator.remove();
+        resolve(value);
       }
     }
   }

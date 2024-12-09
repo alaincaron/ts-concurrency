@@ -1,8 +1,7 @@
-import { Mutex } from './mutex';
+import { Resolve } from './helpers';
 
 export interface ISingleSemaphore {
-  permits: number;
-  canAcquire(): boolean;
+  remaining(): number;
   acquire(): Promise<void>;
   tryAcquire(): boolean;
   release(): void;
@@ -17,12 +16,8 @@ export class InfiniteSingleSemaphore implements ISingleSemaphore {
     return InfiniteSingleSemaphore.INSTANCE;
   }
 
-  get permits() {
+  remaining() {
     return Infinity;
-  }
-
-  canAcquire() {
-    return true;
   }
 
   tryAcquire() {
@@ -39,40 +34,40 @@ export class InfiniteSingleSemaphore implements ISingleSemaphore {
 }
 
 export class SingleSemaphore implements ISingleSemaphore {
-  private nbPermits: number;
-  private mutex: Mutex;
+  private readonly waitingQueue = new Array<Resolve>();
 
-  constructor(nbPermits: number) {
-    this.nbPermits = nbPermits;
-    this.mutex = new Mutex();
-  }
+  constructor(private permits: number = 0) {}
 
-  get permits(): number {
-    return this.nbPermits;
-  }
-
-  canAcquire(): boolean {
-    return this.nbPermits >= 1;
+  remaining(): number {
+    return this.permits;
   }
 
   tryAcquire(): boolean {
-    if (this.nbPermits >= 1) {
-      this.nbPermits--;
+    if (this.permits >= 1) {
+      this.permits--;
       return true;
     }
     return false;
   }
 
   acquire(): Promise<void> {
-    return this.mutex.execute(async () => {
-      await this.mutex.waitUntil(() => this.nbPermits >= 1);
-      --this.nbPermits;
+    return new Promise<void>(resolve => {
+      if (this.permits >= 1) {
+        --this.permits;
+        resolve();
+      } else {
+        this.waitingQueue.push(resolve);
+      }
     });
   }
 
   release(): void {
-    this.nbPermits++;
-    this.mutex.signal();
+    this.permits++;
+    if (this.permits >= 1 && this.waitingQueue.length) {
+      const resolve = this.waitingQueue.shift()!;
+      --this.permits;
+      resolve();
+    }
   }
 
   execute<T>(f: () => Promise<T> | T): Promise<T> {

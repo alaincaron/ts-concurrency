@@ -1,9 +1,14 @@
-import { Resolve } from './helpers';
+import { ISingleSemaphore } from './types';
+import { VoidPromiseResolver } from '../helpers/types';
 
-export class BooleanSemaphore {
-  private waitingQueue = new Array<Resolve>();
+export class BooleanSemaphore implements ISingleSemaphore {
+  private waitingQueue: VoidPromiseResolver[] = [];
 
   constructor(private locked: boolean = false) {}
+
+  remaining() {
+    return this.locked ? 0 : 1;
+  }
 
   isLocked(): boolean {
     return this.locked;
@@ -20,11 +25,11 @@ export class BooleanSemaphore {
   }
 
   acquire(): Promise<void> {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (this.tryAcquire()) {
         resolve();
       } else {
-        this.waitingQueue.push(resolve);
+        this.waitingQueue.push({ resolve, reject });
       }
     });
   }
@@ -32,7 +37,7 @@ export class BooleanSemaphore {
   release(): void {
     if (this.locked) {
       if (this.waitingQueue.length) {
-        const resolve = this.waitingQueue.shift()!;
+        const { resolve } = this.waitingQueue.shift()!;
         resolve();
       } else {
         this.locked = false;

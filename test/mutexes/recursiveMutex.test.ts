@@ -1,7 +1,7 @@
 import { install, InstalledClock } from '@sinonjs/fake-timers';
 import { expect } from 'chai';
-import { sleep, withTimer } from './util';
-import { RecursiveMutex } from '../src';
+import { RecursiveMutex, sleep } from '../../src';
+import { withTimer } from '../util';
 
 describe('recursiveMutex', () => {
   let clock: InstalledClock;

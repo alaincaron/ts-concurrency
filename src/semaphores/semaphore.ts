@@ -1,16 +1,8 @@
-import { Resolve } from './helpers';
+import { ISemaphore } from './types';
+import { VoidPromiseResolver } from '../helpers/types';
 
-type SemResolve = {
-  resolve: Resolve;
+interface SemPromiseResolver extends VoidPromiseResolver {
   required: number;
-};
-
-export interface ISemaphore {
-  remaining(): number;
-  tryAcquire(required?: number): boolean;
-  acquire(required?: number): Promise<void>;
-  release(permitsToReturn?: number): void;
-  execute<T>(f: () => Promise<T> | T, count?: number): Promise<T>;
 }
 
 export class InfiniteSemaphore implements ISemaphore {
@@ -39,7 +31,7 @@ export class InfiniteSemaphore implements ISemaphore {
 }
 
 export class Semaphore implements ISemaphore {
-  private readonly waitingQueue = new Array<SemResolve>();
+  private readonly waitingQueue: SemPromiseResolver[] = [];
 
   constructor(private permits: number = 0) {
     this.permits = permits;
@@ -58,12 +50,12 @@ export class Semaphore implements ISemaphore {
   }
 
   acquire(required: number = 1): Promise<void> {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (this.permits >= required) {
         this.permits -= required;
         resolve();
       } else {
-        this.waitingQueue.push({ resolve, required });
+        this.waitingQueue.push({ resolve, reject, required });
       }
     });
   }

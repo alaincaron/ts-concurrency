@@ -1,12 +1,5 @@
-import { Resolve } from './helpers';
-
-export interface ISingleSemaphore {
-  remaining(): number;
-  acquire(): Promise<void>;
-  tryAcquire(): boolean;
-  release(): void;
-  execute<T>(f: () => Promise<T> | T): Promise<T>;
-}
+import { ISingleSemaphore } from './types';
+import { VoidPromiseResolver } from '../helpers/types';
 
 export class InfiniteSingleSemaphore implements ISingleSemaphore {
   private constructor() {}
@@ -34,7 +27,7 @@ export class InfiniteSingleSemaphore implements ISingleSemaphore {
 }
 
 export class SingleSemaphore implements ISingleSemaphore {
-  private readonly waitingQueue = new Array<Resolve>();
+  private readonly waitingQueue: VoidPromiseResolver[] = [];
 
   constructor(private permits: number = 0) {}
 
@@ -51,12 +44,12 @@ export class SingleSemaphore implements ISingleSemaphore {
   }
 
   acquire(): Promise<void> {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (this.permits >= 1) {
         --this.permits;
         resolve();
       } else {
-        this.waitingQueue.push(resolve);
+        this.waitingQueue.push({ resolve, reject });
       }
     });
   }
@@ -64,7 +57,7 @@ export class SingleSemaphore implements ISingleSemaphore {
   release(): void {
     this.permits++;
     if (this.permits >= 1 && this.waitingQueue.length) {
-      const resolve = this.waitingQueue.shift()!;
+      const { resolve } = this.waitingQueue.shift()!;
       --this.permits;
       resolve();
     }

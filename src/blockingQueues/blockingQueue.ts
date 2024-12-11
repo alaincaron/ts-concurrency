@@ -11,7 +11,7 @@ import {
   WithCapacity,
 } from 'ts-data-collections';
 
-import { ConsumerPromise, ProducerPromise } from './helpers';
+import { ConsumerPromiseResolver, ProducerPromiseResolver } from '../helpers/types';
 
 export abstract class BlockingQueue<E> extends Container {
   // non-blocking: throws
@@ -56,8 +56,8 @@ export abstract class BlockingQueue<E> extends Container {
 }
 
 export abstract class DelegatingBlockingQueue<E> extends BlockingQueue<E> {
-  private readonly consumerQueue: ConsumerPromise<E>[] = [];
-  private readonly producerQueue: ProducerPromise<E>[] = [];
+  private readonly consumerQueue: ConsumerPromiseResolver<E>[] = [];
+  private readonly producerQueue: ProducerPromiseResolver<E>[] = [];
 
   protected constructor(protected readonly delegate: Queue<E>) {
     super();
@@ -65,7 +65,7 @@ export abstract class DelegatingBlockingQueue<E> extends BlockingQueue<E> {
 
   private unlockConsumer() {
     if (this.consumerQueue.length && !this.delegate.isEmpty()) {
-      const resolve = this.consumerQueue.shift()!;
+      const { resolve } = this.consumerQueue.shift()!;
       const item = this.delegate.remove();
       resolve(item);
     }
@@ -85,12 +85,12 @@ export abstract class DelegatingBlockingQueue<E> extends BlockingQueue<E> {
   }
 
   put(item: E) {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (this.delegate.overflowStrategy() !== 'throw' || !this.delegate.isFull()) {
         this.add(item);
         resolve();
       } else {
-        this.producerQueue.push({ resolve, item });
+        this.producerQueue.push({ resolve, reject, item });
       }
     });
   }
@@ -120,12 +120,12 @@ export abstract class DelegatingBlockingQueue<E> extends BlockingQueue<E> {
   }
 
   take(): Promise<E> {
-    return new Promise<E>(resolve => {
+    return new Promise<E>((resolve, reject) => {
       const item = this.poll();
       if (item !== undefined) {
         resolve(item);
       } else {
-        this.consumerQueue.push(resolve);
+        this.consumerQueue.push({ resolve, reject });
       }
     });
   }

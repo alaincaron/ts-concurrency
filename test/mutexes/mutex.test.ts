@@ -1,7 +1,7 @@
 import { install, InstalledClock } from '@sinonjs/fake-timers';
 import { expect } from 'chai';
-import { withTimer } from './util';
-import { Mutex } from '../src';
+import { Mutex } from '../../src';
+import { withTimer } from '../util';
 
 describe('mutex', () => {
   let clock: InstalledClock;

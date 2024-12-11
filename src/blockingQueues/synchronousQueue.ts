@@ -1,11 +1,11 @@
 import { OverflowException, UnderflowException } from 'ts-data-collections';
 import { BlockingQueue } from './blockingQueue';
 
-import { ConsumerPromise, ProducerPromise } from './helpers';
+import { ConsumerPromiseResolver, ProducerPromiseResolver } from '../helpers/types';
 
 export class SynchronousQueue<E> extends BlockingQueue<E> {
-  private readonly producerQueue: ProducerPromise<E>[] = [];
-  private readonly consumerQueue: ConsumerPromise<E>[] = [];
+  private readonly producerQueue: ProducerPromiseResolver<E>[] = [];
+  private readonly consumerQueue: ConsumerPromiseResolver<E>[] = [];
 
   size() {
     return 0;
@@ -35,25 +35,25 @@ export class SynchronousQueue<E> extends BlockingQueue<E> {
   }
 
   put(item: E): Promise<void> {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       if (this.consumerQueue.length > 0) {
-        const consumerResolve = this.consumerQueue.shift()!;
+        const { resolve: consumerResolve } = this.consumerQueue.shift()!;
         consumerResolve(item);
         resolve();
       } else {
-        this.producerQueue.push({ item, resolve });
+        this.producerQueue.push({ item, resolve, reject });
       }
     });
   }
 
   take(): Promise<E> {
-    return new Promise<E>(resolve => {
+    return new Promise<E>((resolve, reject) => {
       if (this.producerQueue.length > 0) {
         const { item, resolve: producerResolve } = this.producerQueue.shift()!;
         producerResolve();
         resolve(item);
       } else {
-        this.consumerQueue.push(resolve);
+        this.consumerQueue.push({ resolve, reject });
       }
     });
   }
@@ -61,7 +61,7 @@ export class SynchronousQueue<E> extends BlockingQueue<E> {
   offer(item: E): boolean {
     if (this.consumerQueue.length > 0) {
       // If there's a waiting consumer, resolve it immediately
-      const consumerResolve = this.consumerQueue.shift()!;
+      const { resolve: consumerResolve } = this.consumerQueue.shift()!;
       consumerResolve(item);
       return true; // Successfully offered the item
     }

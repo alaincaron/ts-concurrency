@@ -1,18 +1,22 @@
 import { PriorityQueue, QueueOptions } from 'ts-data-collections';
 import { Comparators } from 'ts-fluent-iterators';
-import { ConsumerPromise, ProducerPromise } from './helpers';
+import { ConsumerPromiseResolver, ProducerPromiseResolver } from '../helpers/types';
 
 type QueueItem<E> = {
   item: E;
-  expireAt: number;
+  availableAt: number;
 };
 
-const comparator = Comparators.byAttr('expireAt');
+interface DelayedProducerPromiseResolver<E> extends ProducerPromiseResolver<E> {
+  delay: number;
+}
+
+const comparator = Comparators.byAttr('availableAt');
 
 export class DelayedQueue<E> {
   private readonly heap: PriorityQueue<QueueItem<E>>;
-  private waitingProducers = new Array<ProducerPromise<E> & { delay: number }>();
-  private waitingConsumers: ConsumerPromise<E>[] = [];
+  private waitingProducers: DelayedProducerPromiseResolver<E>[] = [];
+  private waitingConsumers: ConsumerPromiseResolver<E>[] = [];
 
   constructor(options?: Omit<QueueOptions, 'comparator' | 'overflowStrategy'>) {
     this.heap = new PriorityQueue<QueueItem<E>>({ ...options, comparator });
@@ -25,7 +29,7 @@ export class DelayedQueue<E> {
   }
 
   add(item: E, delay: number) {
-    this.heap.add({ item, expireAt: Date.now() + delay });
+    this.heap.add({ item, availableAt: Date.now() + delay });
     this.scheduleResolveWaitingConsumer(delay);
   }
 
@@ -36,12 +40,12 @@ export class DelayedQueue<E> {
    * @param delay The delay in milliseconds.
    */
   async put(item: E, delay: number): Promise<void> {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (this.heap.isFull() && this.heap.overflowStrategy() == 'throw') {
-        this.waitingProducers.push({ resolve, item, delay });
+        this.waitingProducers.push({ resolve, reject, item, delay });
       } else {
-        const expireAt = Date.now() + delay;
-        this.heap.add({ item, expireAt });
+        const availableAt = Date.now() + delay;
+        this.heap.add({ item, availableAt });
 
         // Schedule the item to be added to the heap when ready
         this.scheduleResolveWaitingConsumer(delay);
@@ -55,8 +59,8 @@ export class DelayedQueue<E> {
    * @returns A promise that resolves with the item.
    */
   async take(): Promise<E> {
-    return new Promise(resolve => {
-      this.tryResolveWaitingConsumer(resolve);
+    return new Promise((resolve, reject) => {
+      this.tryResolveWaitingConsumer({ resolve, reject });
     });
   }
 
@@ -64,7 +68,7 @@ export class DelayedQueue<E> {
    * Resolves waiting consumers with ready items.
    * Inserts scheduled items into the heap if their delay has expired.
    */
-  private tryResolveWaitingConsumer(resolve?: ConsumerPromise<E>): void {
+  private tryResolveWaitingConsumer(resolve?: ConsumerPromiseResolver<E>): void {
     const now = Date.now();
 
     if (resolve) {
@@ -73,10 +77,10 @@ export class DelayedQueue<E> {
 
     // Notify pending consumers
     while (!this.heap.isEmpty() && this.waitingConsumers.length > 0) {
-      const { item, expireAt } = this.heap.peek()!;
-      if (expireAt <= now) {
+      const { item, availableAt } = this.heap.peek()!;
+      if (availableAt <= now) {
         this.heap.remove();
-        const consumer = this.waitingConsumers.shift()!;
+        const { resolve: consumer } = this.waitingConsumers.shift()!;
         consumer(item);
         this.tryResolveWaitingProducer(); // Notify waiting producers
       } else {
@@ -92,7 +96,7 @@ export class DelayedQueue<E> {
    * @returns `true` if the item is added successfully; `false` if the queue is full.
    */
   offer(item: E, delay: number): boolean {
-    const result = this.heap.offer({ item, expireAt: Date.now() + delay });
+    const result = this.heap.offer({ item, availableAt: Date.now() + delay });
     if (!result) return result;
 
     // Schedule the item to be added to the heap when ready
@@ -116,18 +120,18 @@ export class DelayedQueue<E> {
   peek(): E | undefined {
     const now = Date.now();
     const data = this.heap.peek();
-    if (data === undefined || data.expireAt >= now) return undefined;
+    if (data === undefined || data.availableAt >= now) return undefined;
     return data.item;
   }
 
   /**
    * Resolves the earliest waiting producer if there is room in the queue.
-   */
+g   */
   private tryResolveWaitingProducer(): void {
     if (!this.waitingProducers.length) return;
     if (this.heap.isFull() && this.heap.overflowStrategy() === 'throw') return;
     const { resolve, item, delay } = this.waitingProducers.shift()!;
-    this.heap.add({ item, expireAt: Date.now() + delay });
+    this.heap.add({ item, availableAt: Date.now() + delay });
     resolve();
   }
 

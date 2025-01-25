@@ -1,18 +1,9 @@
-interface PromiseDefinition {
-  resolve: () => void;
-  reject: (e: any) => void;
-}
+import { VoidPromiseResolver } from '../helpers';
 
 export class Mutex {
-  private queue: Array<PromiseDefinition>;
-  private waitQueue: Array<PromiseDefinition>;
-  private locked: boolean;
-
-  constructor() {
-    this.queue = [];
-    this.waitQueue = [];
-    this.locked = false;
-  }
+  private readonly queue: VoidPromiseResolver[] = [];
+  private readonly waitQueue: VoidPromiseResolver[] = [];
+  private locked: boolean = false;
 
   lock(): Promise<void> {
     return new Promise<void>((resolve, reject) => {

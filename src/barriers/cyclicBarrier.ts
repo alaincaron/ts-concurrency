@@ -3,7 +3,7 @@ import { VoidPromiseResolver } from '../helpers/types';
 
 export class CyclicBarrier implements IBarrier {
   private readonly n: number;
-  private waitingQueue: VoidPromiseResolver[] = [];
+  private readonly waitingQueue: VoidPromiseResolver[] = [];
   constructor(n: number) {
     if (n < 0 || !Number.isSafeInteger(n)) throw new Error(`Invalid non positive integer: ${n}`);
     this.n = n;

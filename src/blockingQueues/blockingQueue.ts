@@ -2,7 +2,7 @@ import {
   ArrayDeque,
   ArrayStack,
   buildCollection,
-  Container,
+  AbstractContainer,
   PriorityQueue,
   PriorityQueueOptions,
   Queue,
@@ -13,7 +13,7 @@ import {
 
 import { ConsumerPromiseResolver, ProducerPromiseResolver } from '../helpers/types';
 
-export abstract class BlockingQueue<E> extends Container {
+export abstract class BlockingQueue<E> extends AbstractContainer implements Iterable<E> {
   // non-blocking: throws
   abstract add(item: E): void;
   abstract remove(): E;
@@ -33,7 +33,7 @@ export abstract class BlockingQueue<E> extends Container {
 
   // read-only non-blocking
   toArray(): Array<E> {
-    return Array.from(this.iterator());
+    return Array.from(this);
   }
 
   // non-blocking
@@ -44,7 +44,7 @@ export abstract class BlockingQueue<E> extends Container {
   }
 
   // non-blocking
-  abstract iterator(): IterableIterator<E>;
+  abstract [Symbol.iterator](): Iterator<E>;
 
   // async iterator: block
   async *asyncIterator(): AsyncIterableIterator<E> {
@@ -146,8 +146,12 @@ export abstract class DelegatingBlockingQueue<E> extends BlockingQueue<E> {
     return this.delegate.toArray();
   }
 
-  iterator() {
+  [Symbol.iterator]() {
     return this.delegate[Symbol.iterator]();
+  }
+
+  toJSON() {
+    return this.delegate.toJSON();
   }
 }
 

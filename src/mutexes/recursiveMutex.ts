@@ -1,15 +1,17 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import * as crypto from 'node:crypto';
+import { VoidPromiseResolver } from '../helpers';
 
-type Resolve = () => void;
-type LockResolve = { threadId: string; resolve: Resolve };
+interface LockResolver extends VoidPromiseResolver {
+  threadId: string;
+}
 
 export class RecursiveMutex {
   private currentOwner: string | null = null;
   private lockCount: number = 0;
-  private queue: LockResolve[] = [];
-  private waitQueue: Resolve[] = [];
-  private asyncLocalStorage = new AsyncLocalStorage<string>();
+  private readonly queue: LockResolver[] = [];
+  private readonly waitQueue: VoidPromiseResolver[] = [];
+  private readonly asyncLocalStorage = new AsyncLocalStorage<string>();
 
   private createThreadId() {
     return crypto.randomBytes(10).toString('hex');
@@ -80,10 +82,9 @@ export class RecursiveMutex {
     if (!threadId) {
       threadId = this.createThreadId();
       this.asyncLocalStorage.enterWith(threadId);
-    } else {
     }
 
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve, reject) => {
       if (!this.currentOwner) {
         // Acquire the lock
         this.currentOwner = threadId;
@@ -91,7 +92,7 @@ export class RecursiveMutex {
         resolve();
       } else {
         // Enqueue if lock is held
-        this.queue.push({ threadId, resolve });
+        this.queue.push({ threadId, resolve, reject });
       }
     });
   }
@@ -134,8 +135,8 @@ export class RecursiveMutex {
       this.lockCount = 0;
     }
 
-    await new Promise<void>(resolve => {
-      this.waitQueue.push(resolve);
+    await new Promise<void>((resolve, reject) => {
+      this.waitQueue.push({ resolve, reject });
     });
     await this.lock();
     this.lockCount = count;
@@ -149,16 +150,16 @@ export class RecursiveMutex {
 
   signal() {
     if (this.waitQueue.length > 0) {
-      const resolve = this.waitQueue.shift()!;
+      const { resolve } = this.waitQueue.shift()!;
       resolve();
     }
   }
 
   signalAll() {
-    while (this.waitQueue.length > 0) {
-      const resolve = this.waitQueue.shift()!;
+    for (const { resolve } of this.waitQueue) {
       resolve();
     }
+    this.waitQueue.length = 0;
   }
 
   async execute<T>(fn: () => T | Promise<T>): Promise<T> {

@@ -2,7 +2,7 @@ import { LinkedList } from 'ts-data-collections';
 
 export class WaitableBooleanVariable {
   private value: boolean;
-  private queues: LinkedList<() => void>[];
+  private readonly queues: LinkedList<() => void>[];
 
   constructor(initialValue: boolean) {
     this.value = initialValue;

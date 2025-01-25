@@ -2,7 +2,7 @@ import { ISingleSemaphore } from './types';
 import { VoidPromiseResolver } from '../helpers/types';
 
 export class BooleanSemaphore implements ISingleSemaphore {
-  private waitingQueue: VoidPromiseResolver[] = [];
+  private readonly waitingQueue: VoidPromiseResolver[] = [];
 
   constructor(private locked: boolean = false) {}
 

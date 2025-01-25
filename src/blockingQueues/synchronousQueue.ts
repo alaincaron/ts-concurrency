@@ -82,5 +82,5 @@ export class SynchronousQueue<E> extends BlockingQueue<E> {
     return undefined;
   }
 
-  *iterator(): IterableIterator<E> {}
+  *[Symbol.iterator]() {}
 }

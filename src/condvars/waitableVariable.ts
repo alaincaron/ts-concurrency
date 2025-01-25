@@ -3,7 +3,7 @@ import { Predicate } from 'ts-fluent-iterators';
 
 export class WaitableVariable<T> {
   private value: T;
-  private queue: LinkedList<{
+  private readonly queue: LinkedList<{
     predicate: Predicate<T>;
     resolve: () => void;
   }>;

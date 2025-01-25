@@ -1,5 +1,6 @@
 import { ISemaphore } from './types';
 import { VoidPromiseResolver } from '../helpers/types';
+import { Queue, ArrayDeque } from 'ts-data-collections';
 
 interface SemPromiseResolver extends VoidPromiseResolver {
   required: number;
@@ -31,7 +32,7 @@ export class InfiniteSemaphore implements ISemaphore {
 }
 
 export class Semaphore implements ISemaphore {
-  private readonly waitingQueue: SemPromiseResolver[] = [];
+  private readonly waitingQueue: Queue<SemPromiseResolver> = new ArrayDeque();
 
   constructor(private permits: number = 0) {
     this.permits = permits;
@@ -55,7 +56,7 @@ export class Semaphore implements ISemaphore {
         this.permits -= required;
         resolve();
       } else {
-        this.waitingQueue.push({ resolve, reject, required });
+        this.waitingQueue.add({ resolve, reject, required });
       }
     });
   }
@@ -66,16 +67,18 @@ export class Semaphore implements ISemaphore {
   }
 
   private notifyWaiters() {
-    for (let i = 0; i < this.waitingQueue.length; ++i) {
-      const { resolve, required } = this.waitingQueue[i];
+    const iterator = this.waitingQueue.queueIterator();
+    for (;;) {
+      const item = iterator.next();
+      if (item.done) return false;
+      const { resolve, required } = item.value;
       if (required <= this.permits) {
         this.permits -= required;
-        this.waitingQueue.splice(i, 1);
+        iterator.remove();
         resolve();
         return true;
       }
     }
-    return false;
   }
 
   execute<T>(f: () => Promise<T> | T, count: number = 1): Promise<T> {
